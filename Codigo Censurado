@@ -1,0 +1,111 @@
+CREATE OR REPLACE PROCEDURE PRD_CONF_FER_FER_DOM AS
+/*
+ * Descricao: Conferência das Sequências de FERIADO e FERIADO_DOMINIO.
+ * Criado em : 16/08/2024
+ * Impacto DB: Sim
+ * Commit:     NAO
+ * Rollback:   NAO
+ * @author    [CENSURADO]
+ * Revisao    [CENSURADO]
+ * Revisão -2 [CENSURADO] --> ajuste no valor da sequence caso esteja menor que o valor correto
+ * Versao:     1.0
+ */
+v_texto_email              VARCHAR2(32767) := null;
+v_vcrlf                    VARCHAR2(2) := CHR(13) || CHR(10);  
+v_e_mail_origem            VARCHAR2(100) := '[CENSURADO]';
+v_e_mail_destino           VARCHAR2(100) := '[CENSURADO]';  
+v_e_mail_destino_2         VARCHAR2(100) := null; -- '[CENSURADO]'; 
+v_e_mail_assunto_1         VARCHAR2(200);
+V_STATUS                   VARCHAR2(100);
+V_MAIL_HOST                VARCHAR2(100) := '[CENSURADO]';
+v_data                     DATE := SYSDATE;
+v_max_cod_feriado          NUMBER(5);
+v_cur_seq_feriado          NUMBER(5);
+v_max_cod_feriado_dominio  NUMBER(5);
+v_cur_seq_feriado_dominio  NUMBER(5);
+VCRLF_2                    VARCHAR2(4) := '<br>';  
+v_Increment_value          CONSTANT NUMBER := 1;
+v_Next_value               NUMBER;
+v_instancia VARCHAR2(20);
+
+BEGIN
+    SELECT upper(sys_context('userenv','db_name')) INTO v_instancia FROM dual;
+
+    IF v_instancia = 'ATRIUM' THEN
+        V_E_MAIL_ASSUNTO_1 := 'Conferência das Sequências de FERIADO e FERIADO_DOMINIO em ATRIUM' ||
+                              ' Data: ' || to_char(v_data, 'dd/mm/yy hh24:mm');
+    ELSIF v_instancia = 'ANIMUS_D' THEN
+        V_E_MAIL_ASSUNTO_1 := '** TESTE ** em ==>'||v_instancia||' Conferência das Sequências de FERIADO e FERIADO_DOMINIO' ||
+                              ' Data: ' || to_char(v_data, 'dd/mm/yy hh24:mm');
+    END IF;
+
+    v_texto_email := '<html>
+                        <head><title>Conferência das Sequências</title></head>
+                        <body>
+                        <h1>Conferência das Sequências</h1>
+                        <table border="1">';
+
+    -- Conferir SEQ_FERIADO
+    BEGIN
+        SELECT MAX(cod_feriado) 
+        INTO v_max_cod_feriado 
+        FROM feriado;
+
+        SELECT last_number
+        INTO v_cur_seq_feriado 
+        FROM user_sequences 
+        WHERE sequence_name = 'SEQ_FERIADO';
+
+        IF v_cur_seq_feriado <= v_max_cod_feriado THEN
+            v_Next_value := v_max_cod_feriado - v_cur_seq_feriado + 1;
+
+            v_texto_email := v_texto_email || 
+                '<tr><td>' ||
+                '***Verificar***' || VCRLF_2 ||
+                'Maior COD_FERIADO (' || v_max_cod_feriado || ') na tabela FERIADO é maior ou igual ao valor corrente da sequence SEQ_FERIADO (' || v_cur_seq_feriado || ')' || '</td></tr>'; 
+
+            BEGIN
+                EXECUTE IMMEDIATE 'ALTER SEQUENCE SEQ_FERIADO INCREMENT BY -1';
+                EXECUTE IMMEDIATE 'SELECT SEQ_FERIADO.NEXTVAL FROM dual' INTO v_Next_value;
+                EXECUTE IMMEDIATE 'ALTER SEQUENCE SEQ_FERIADO INCREMENT BY 1';
+
+                v_texto_email := v_texto_email ||  '<tr><td> Novo valor após incremento: '  || v_Next_value || '</td></tr>';
+            EXCEPTION
+                WHEN OTHERS THEN
+                    v_texto_email := v_texto_email ||'<tr><td>Erro ao ajustar a sequence SEQ_FERIADO: ' || SQLERRM|| '</td></tr>';
+            END;
+        ELSE
+            v_texto_email := v_texto_email ||'<tr><td>SEQUENCIA SEQ_FERIADO ESTÁ OK</td></tr>';       
+        END IF;
+    EXCEPTION
+        WHEN OTHERS THEN
+            v_texto_email := v_texto_email ||  '<tr><td>Erro ao consultar a tabela FERIADO: ' || substr(SQLERRM,1,500)||'</td></tr>';
+    END;
+
+    -- SEQ_FERIADO_DOMINIO omitido para brevidade.
+
+    v_texto_email := v_texto_email || '</table></BODY></HTML>';
+
+    PKG_MAIL.PRD_SEND_MAIL(
+        '[CENSURADO]',
+        '[CENSURADO]',
+        '[CENSURADO]',
+        v_e_mail_destino_2,
+        v_e_mail_assunto_1,
+        v_texto_email,
+        V_STATUS
+    );
+
+EXCEPTION
+    WHEN OTHERS THEN
+        v_texto_email := v_texto_email || 'Erro ao executar a procedure: ' || SQLCODE || ' - ' || SQLERRM;
+        PKG_MAIL.PRD_SEND_MAIL(
+            '[CENSURADO]',
+            '[CENSURADO]',
+            '[CENSURADO]',
+            v_e_mail_destino_2,
+            v_e_mail_assunto_1,
+            v_texto_email,
+            V_STATUS
+        );
+END;
